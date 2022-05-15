@@ -11,11 +11,18 @@
  *      votes,
  * }
  */
-$.widget( "rm.CandidateCard", {
+$.widget( "rm.BoxCard", {
     options: {
         value: 0
     },
-    _create: function() {
+    _create: function( boxref ) {
+        // get box location, votes
+        const location = 'location' ;
+        const eligible_votes = 0 ;
+        const title = `<div class="w3-panel">Box ${boxref} - ${eligible_votes} voters.<br/>Location ${location}</div>` ;
+        this._setOption( "title", title ) ;
+        const candidates = `<div class="w3-panel"> ... waiting </div>` ;
+        const candidate =`<div class="w3-panel w3-quarter"><img src="img_snowtops.jpg" class="w3-round"</div><div class="w3-panel w3-rest"><span class="w3-tag w3-large">-%</span> - votes.</div>` ;
         this.options.value = this._constrain(this.options.value);
         this.element.addClass( "progressbar" );
         this.refresh();
