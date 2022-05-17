@@ -7,15 +7,18 @@ type VoteBox = {
     box : string,
     can_vote : number,
 }
-type Result = {
+type CandidateVote = {
     candidate : number,
     votes : number,
     percent? : number
 }
-type VoteResult = {
+type CandidatesVotes = {
+    [index: string] : number
+}
+type BoxResult = {
     box : string,
     did_vote : number,
-    result : Result[]
+    candidate_votes : CandidateVotes[]
 }
 
 const URL_BOXES = "" ;
@@ -48,10 +51,10 @@ function fetchResults(): VoteBox[] {
 }
 
 
-type OverallResult = {
+type OverallVote = {
     box_voted : number,
     box_total : number,
-    result : Result[] 
+    voted : Voted[] 
 }
 type Regions = {
     name: string,
@@ -60,22 +63,63 @@ type Regions = {
 
 
 function fetchProcess() {
-    const boxes: VoteBox[] = window.sessionStorage.getItem( KEY_BOXES ) as VoteBox[] ;
-    const results: VoteResult[] = window.sessionStorage.getItem( KEY_RESULTS ) as VoteResult[] ;
+    const store = window.sessionStorage ;
+    const boxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
+    const voteResults : VoteResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteResult[] ;
     // compute overall
-    const overallResult: OverallResult = {
+    const overallVote: OverallVote = {
         box_voted : results.length,
         box_total : boxes.length,
-        result : [] 
+        results : [] 
+    }
+    for ( const result of voteResults ) {
+        addResult( result, result.overallResult.results ) ;
     }
 
 
 }
 
 
-function addResult( from : Result, to : Result ) {
-    for ( const prp in from ) {
-        if ( !( prp in to ) ) to.prp = 0 ;
-        to.prp += from.prp ;
+function addResult( from : CandidateVote[][], to : CandidateVote[] ) : number {
+    // ensure "to" contains all required candidates
+    const candidates : Set<string> = new Set( from[0].map( c => c.candidate ) ) ;
+    const objVotes : CandidateVotes = objFromCandidateVote( candidates ) ;
+    // add up
+    for ( const candidateVoteArray of from ) {
+        for ( const candidateVote of candidateVoteArray ) {
+            objVotes[candidateVote.candidate] += candidateVote.votes ;
+        }
+    }
+    // return
+    objToCandidateVotes( objVotes, to ) ;
+    return properCandidateVotes( to ) ;        
+}
+
+function objFromCandidateVote( candidates : Set<string> ) : CandidatesVotes {
+    const objVotes = {} ;
+    for ( const candidate of candidates ) {
+        objVotes[candidate] = 0 ;
+    }
+    return objVotes ;
+}
+function objToCandidateVotes( obj: CandidatesVotes, candidateVotes : CandidateVote[] ) {
+    for ( const candidate in obj ) {
+        const candidateVote: CandidateVote = candidateVotes.find( c => c.candidate == candidate ) ;
+        if ( !candidateVote ) {
+            candidateVotes.push( {
+                candidate: candidate,
+                votes : obj[candidate]
+            } ) ;
+        } else {
+            candidateVote.votes += obj[candidate] ;
+        }
     }
 }
+
+function properCandidateVotes( candidateVotes : CandidateVote[] ) : number {
+    const did_vote : number = candidateVotes.reduce( ( total_votes, candidateVote ) => total_votes + candidateVote.votes, 0 ) ;
+    candidateVotes.sort( ( candidateVote1, candidateVote2 ) => candidateVote2.votes - candidateVote1.votes ) ;
+    candidateVotes.forEach( candidateVote => candidateVote.percent = Number(candidateVote.votes/did_vote).toFixed(1) ) ;        
+    return did_vote ;
+}
+
