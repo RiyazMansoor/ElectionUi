@@ -1,5 +1,6 @@
 
 type VoteBox = {
+    election : string,
     regiontype: "C"|"A",
     region : string,
     island : string,
@@ -7,18 +8,11 @@ type VoteBox = {
     box : string,
     can_vote : number,
 }
-type CandidateVote = {
-    candidate : number,
-    votes : number,
-    percent? : number
-}
-type CandidatesVotes = {
-    [index: string] : number
-}
-type BoxResult = {
+type VoteBoxResult = {
     box : string,
-    did_vote : number,
-    candidate_votes : CandidateVotes[]
+    votes : {
+        [index: number] : number
+    }
 }
 
 const URL_BOXES = "" ;
@@ -31,23 +25,123 @@ function fetchFailure( e ) {
     console.error( e ) ;
 }
 
-function fetchBoxesSuccess( data: VoteBox[] ) {
+function fetchBoxesSuccess( data: VoteBox[] ) : void {
     window.sessionStorage.setItem( KEY_BOXES, JSON.stringify( data ) ) ;
 }
-function fetchBoxes(): VoteBox[] {
+function fetchBoxes(): void {
     $.getJSON( URL_BOXES, fetchSuccess, fetchFailure ) ;
 }
 
-function fetchResultsSuccess( data: VoteResult[] ) {
-    data.forEach( box => {
-        box.did_vote = box.result.reduce( ( total_votes, candidate ) => total_votes + candidate.votes, 0 ) ;
-        box.result.sort( ( box1, box2 ) => box1.votes - box2.votes ) ;
-        box.result.forEach( candidate => candidate.percent = Number(candidate.votes/box.did_vote).toFixed(1) ) ;        
-    } ) ;
+function fetchResultsSuccess( data: VoteBoxResult[] ) : void {
     window.sessionStorage.setItem( KEY_RESULTS, JSON.stringify( data ) ) ;
 }
-function fetchResults(): VoteBox[] {
+function fetchResults(): void {
     $.getJSON( URL_RESULTS, fetchSuccess, fetchFailure ) ;
+}
+
+function Turnout( did_vote: number, can_vote: number ) : number {
+    return Number( 100 * did_vote / can_vote ).toFixed( 1 ) ;
+}
+
+abstract class Entity {
+
+    title: string = "" ;
+    child_total: number = 0 ;
+    child_counted: number = 0 ;
+    completed: boolean = false ;
+    can_vote: number = 0 ;
+    did_vote: number = 0 ;
+    turnout: number = 0 ;
+    votes: { [index: number] : number } = {}
+ 
+}
+
+class Box extends Entity {
+    
+    constructor( voteBox: VoteBox, voteBoxResult: VoteBoxResult ) {
+        this.title = "Box: " + voteBox.box ;
+        this.child_total = 1 ;
+        this.can_vote = voteBox.can_vote ;
+        if ( voteBoxResult ) {
+            this.child_counted = 1 ;
+            this.completed = true ;
+            this.did_vote = Object.values( voteBoxResult.votes ).reduce( ( pv, cv ) => pv + cv, 0 ) ;
+            this.turnout = Turnout( this.did_vote, voteBox.can_vote ) ;
+            for ( const [ key, value ] in Object.entries( voteBoxResult.votes ) ) {
+                votes[key] = value ;
+            }
+        }
+    }
+
+}
+
+abstract class Aggregate extends Entity {
+    
+    constructor( entities: Entity[], title: string ) {
+        this.title = title ;
+        this.child_total = entities.length ;
+        this.child_counted = entities.reduce( ( pv, cv ) => pv + cv.child_counted, 0 ) ;
+        this.can_vote = entities.reduce( ( pv, cv ) => pv + cv.can_vote, 0 ) ;
+        this.completed = ( this.child_total == this.child_counted ) ;
+        if ( this.child_counted ) {
+            this.did_vote = entities.reduce( ( pv, cv ) => pv + cv.did_vote, 0 ) ;
+            this.turnout = Turnout( this.did_vote, this.can_vote ) ;
+            for ( const key in entities[0].votes ) {
+                this.votes[key] = 0 ;
+            }
+            for ( const entity of entities ) {
+                for ( const [ key, valaue ] in Object.entries( entity.votes ) ) {
+                    this.votes[key] += value ;
+                }
+            }
+        }
+    }
+
+}
+
+class Island extends Aggregate {
+    constructor( boxes: Box[], island: string ) {
+        super( boxes, "Island: " + island ) ;
+    }
+}
+
+class Constituency extends Aggregate {
+    constructor( boxes: Box[], constit: string ) {
+        super( boxes, "Constituency: " + constit ) ;
+    }
+}
+
+class AtollIslands extends Aggregate {
+    constructor( islands: Island[], atoll: string ) {
+        super( islands, "Islands of Atoll: " + atoll ) ;
+    }
+}
+class AtollConstituencies extends Aggregate {
+    constructor( constits: Constituency[], atoll: string ) {
+        super( constits, "Constituencies of Atoll: " + atoll ) ;
+    }
+}
+
+class CityIslands extends Aggregate {
+    constructor( islands: Island[], city: string ) {
+        super( islands, "Islands of City: " + city ) ;
+    }
+}
+class CityConstituencies extends Aggregate {
+    constructor( constits: Constituency[], city: string ) {
+        super( constits, "Constituencies of City: " + city ) ;
+    }
+}
+
+class Atoll {
+    
+    islands: Island[] = [];
+    constits: Constituency[] = [] ;
+
+    constructor( islands: Island[], constits: Constituency[] ) {
+        islands.forEach( isle => new Island())    
+    }
+
 }
 
 
@@ -122,4 +216,5 @@ function properCandidateVotes( candidateVotes : CandidateVote[] ) : number {
     candidateVotes.forEach( candidateVote => candidateVote.percent = Number(candidateVote.votes/did_vote).toFixed(1) ) ;        
     return did_vote ;
 }
+
 
