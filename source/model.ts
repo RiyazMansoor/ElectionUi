@@ -39,6 +39,38 @@ function fetchResults(): void {
     $.getJSON( URL_RESULTS, fetchSuccess, fetchFailure ) ;
 }
 
+function updateModel() : void {
+    const store = window.sessionStorage ;
+    const voteBoxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
+    const voteBoxResults : VoteBoxResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteBoxResult[] ;
+    const boxes : { [index: string] : [ VoteBox, VoteBoxResult ] }  = {},
+          islands : { [index: string] : Entity[] }  = {},
+          constits : { [index: string] : Entity[] }  = {} 
+    ;
+    voteBoxes.forEach( vb => {
+        boxes[vb.box] = [ vb, null ] ;
+        islands[vb.island] = [] ;
+        constits[vb.constit] = [] ; 
+    } ) ;
+    voteBoxResults.forEach( vbr => boxes[vbr.box][1] = vbr ) ;
+    const boxEs : Box[] = [],
+          islandEs : Island[],
+          constitEs : Constituency[] ;
+    boxes.forEach( box => {
+        const [ vb, vbr ] = box ;
+        const b = new Box( vb, vbr ) ;
+        islands[vb.island].push( b ) ;
+        constit[vb.constit].push( b ) ;
+    } ) ;
+
+    const islandBoxes = {}, constitBoxes = {} ;
+}
+function updatePage() : void {
+
+}
+
+
+
 function Turnout( did_vote: number, can_vote: number ) : number {
     return Number( 100 * did_vote / can_vote ).toFixed( 1 ) ;
 }
@@ -101,57 +133,68 @@ abstract class Aggregate extends Entity {
 
 class Island extends Aggregate {
     constructor( boxes: Box[], island: string ) {
-        super( boxes, "Island: " + island ) ;
+        super( boxes, `Island: ${constit}` ) ;
     }
 }
-
 class Constituency extends Aggregate {
     constructor( boxes: Box[], constit: string ) {
-        super( boxes, "Constituency: " + constit ) ;
+        super( boxes, `Constituency: ${constit}` ) ;
     }
 }
 
 class AtollIslands extends Aggregate {
     constructor( islands: Island[], atoll: string ) {
-        super( islands, "Islands of Atoll: " + atoll ) ;
+        super( islands, `Atoll: ${atoll} by Geography` ) ;
     }
 }
 class AtollConstituencies extends Aggregate {
     constructor( constits: Constituency[], atoll: string ) {
-        super( constits, "Constituencies of Atoll: " + atoll ) ;
+        super( constits, `Atoll: ${atoll} by Constituency` ) ;
     }
 }
-
 class CityIslands extends Aggregate {
     constructor( islands: Island[], city: string ) {
-        super( islands, "Islands of City: " + city ) ;
+        super( islands, `City: ${city} by Geography` ) ;
     }
 }
 class CityConstituencies extends Aggregate {
     constructor( constits: Constituency[], city: string ) {
-        super( constits, "Constituencies of City: " + city ) ;
+        super( constits, `City: ${city} by Constituency` ) ;
     }
 }
 
-class Atoll {
-    
-    islands: Island[] = [];
-    constits: Constituency[] = [] ;
-
-    constructor( islands: Island[], constits: Constituency[] ) {
-        islands.forEach( isle => new Island())    
+class GroupedAtollIslands extends Aggregate {
+    constructor( atolls: AtollIsland[] ) {
+        super( atolls, "All Atolls by Geography " ) ;
     }
-
+}
+class GroupedAtollConstituencies extends Aggregate {
+    constructor( atoll: AtollConstituencies[] ) {
+        super( constits, "All Atolls by Constituency " ) ;
+    }
 }
 
-
-type OverallVote = {
-    box_voted : number,
-    box_total : number,
-    voted : Voted[] 
+class GroupedCityIslands extends Aggregate {
+    constructor( cities: CityIslands[] ) {
+        super( cities, "All Cities by Geography " ) ;
+    }
 }
-type Regions = {
-    name: string,
+class GroupedCityConstituencies extends Aggregate {
+    constructor( cities: CityConstituencies[] ) {
+        super( cities, "All Cities by Constituency " ) ;
+    }
+}
+
+class OverallIslands extends Aggregate {
+    constructor( cities: GroupedCityIslands, atolls: GroupedAtollIslands ) {
+        super( [ cities, atolls ], "Cities and Atolls by Geography" ) ;
+    }
+}
+class OverallConstituencies extends Aggregate {
+    constructor( cities: GroupedCityConstituencies, atolls: GroupedAtollConstituencies ) {
+        super( [ cities, atolls ], "Cities and Atolls by Constituency" ) ;
+    }
+}
 
 }
 
