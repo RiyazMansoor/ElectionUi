@@ -1,12 +1,25 @@
 
+type VoteBoxDefn = {
+    boxid       : string,
+    can_vote    : number,
+    candidates  : number[],
+}
+
+type ConstituencyDefn = {
+    id          : string,
+    parent      : string,
+    boxes       : string[],
+}
+
 type VoteBox = {
     election : string,
-    regiontype: "C"|"A",
-    region : string,
+    atolltype : "C"|"A", 
+    atoll : string,
     island : string,
     constit : string,
     box : string,
     can_vote : number,
+    candidates  : number[],
 }
 type VoteBoxResult = {
     box : string,
@@ -39,20 +52,39 @@ function fetchResults(): void {
     $.getJSON( URL_RESULTS, fetchSuccess, fetchFailure ) ;
 }
 
-function updateModel() : void {
+function updateStaticModel() : void {
     const store = window.sessionStorage ;
     const voteBoxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
-    const voteBoxResults : VoteBoxResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteBoxResult[] ;
+    const model = {} ;
+    for ( const vb of voteBoxes ) {
+        if ( !model.hasOwnProperty( vb.election ) ) model[vb.election] = {} ;
+        const election = model[vb.election] ;
+        if ( election.hasOwnProperty( vb.atoll ) ) election[vb.atoll] = {} ;
+        const atoll = election[vb.atoll] ;
+        if ( atoll.hasOwnProperty( vb.island ) ) atoll[vb.island] = {} ;
+        const island = atoll[vb.island] ;
+        if ( atoll.hasOwnProperty( vb.constit ) ) atoll[vb.constit] = {} ;
+        const constit = atoll[vb.constit] ;
+        if ( island.hasOwnProperty( vb.box ) ) island[vb.box] = {} ;
+        if ( constit.hasOwnProperty( vb.box ) ) constit[vb.box] = {} ;
+        
+    }
+
     const boxes : { [index: string] : [ VoteBox, VoteBoxResult ] }  = {},
-          islands : { [index: string] : Entity[] }  = {},
-          constits : { [index: string] : Entity[] }  = {} 
+          islands : { [index: string] : Box[] }  = {},
+          constits : { [index: string] : Box[] }  = {}, 
+          atollislands : { [index: string] : Island[] }  = {}, 
+          atollconstits : { [index: string] : Constituency[] }  = {}, 
+          cityislands : { [index: string] : Island[] }  = {}, 
+          cityconstits : { [index: string] : Constituency[] }  = {}, 
     ;
     voteBoxes.forEach( vb => {
         boxes[vb.box] = [ vb, null ] ;
         islands[vb.island] = [] ;
         constits[vb.constit] = [] ; 
+        atolls[vb.atoll] = [] ;
+        cities[vb.city] = [] ;
     } ) ;
-    voteBoxResults.forEach( vbr => boxes[vbr.box][1] = vbr ) ;
     const boxEs : Box[] = [],
           islandEs : Island[],
           constitEs : Constituency[] ;
