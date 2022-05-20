@@ -1,71 +1,149 @@
 
-type VoteBox = {
-    election : string,
-    regiontype: "C"|"A",
-    region : string,
-    island : string,
-    constit : string,
-    box : string,
-    can_vote : number,
+type ElectionT = string ;
+type ElectionPostT = string ;
+type BoxT = string ;
+type CandidateT = string ;
+
+type VoteBoxDefn = {
+    [index: BoxT] : {
+        election : ElectionT,
+        regiontype: "C"|"A",
+        region : string,
+        island : string,
+        constit : string,
+        posts : {
+            [index: ElectionPostT] : number,
+        },
+    }
+}
+type ElectionDefn = {
+    [index: ElectionT] : {
+        description: string,
+        posts: {
+            [index: ElectionPostT] : {
+                id: CandidateT,
+                name: string,
+                party: string,
+            }[]
+        },
+        boxes: VoteBoxDefn
+    }
 }
 type VoteBoxResult = {
-    box : string,
+    election : ElectionT,
+    box : BoxT,
     votes : {
-        [index: number] : number
+        [index: ElectionPostT] : {
+            [index: CandidateT] : number
+        }
     }
 }
 
-const URL_BOXES = "" ;
-const KEY_BOXES = "" ;
-
-const URL_RESULTS = "" ;
-const KEY_RESULTS = "" ;
+const URL_ElectionDefn  = "" ;
+const URL_VoteBoxResult = "" ;
 
 function fetchFailure( e ) {
     console.error( e ) ;
 }
 
-function fetchBoxesSuccess( data: VoteBox[] ) : void {
-    window.sessionStorage.setItem( KEY_BOXES, JSON.stringify( data ) ) ;
+function fetchElectionDefnSuccess( data: ElectionDefn ) : void {
+    window.sessionStorage.setItem( URL_ElectionDefn, JSON.stringify( data ) ) ;
 }
-function fetchBoxes(): void {
-    $.getJSON( URL_BOXES, fetchSuccess, fetchFailure ) ;
-}
-
-function fetchResultsSuccess( data: VoteBoxResult[] ) : void {
-    window.sessionStorage.setItem( KEY_RESULTS, JSON.stringify( data ) ) ;
-}
-function fetchResults(): void {
-    $.getJSON( URL_RESULTS, fetchSuccess, fetchFailure ) ;
+function fetchElectionDefn(): void {
+    $.getJSON( URL_ElectionDefn, fetchElectionDefnSuccess, fetchFailure ) ;
 }
 
+function fetchVoteBoxResultSuccess( data: VoteBoxResult ) : void {
+    window.sessionStorage.setItem( URL_VoteBoxResult, JSON.stringify( data ) ) ;
+}
+function fetchVoteBoxResult(): void {
+    $.getJSON( URL_VoteBoxResult, fetchVoteBoxResultSuccess, fetchFailure ) ;
+}
+
+
+type ElectionEntity = {
+    title: string,
+    boxes_total: number,
+    boxes_count: number,
+    posts: {
+        [index: ElectionPostT]: {
+            can_vote: number,
+            rem_vote: number,
+            did_vote: number,
+            turnout: number,
+            cum_votes : {
+                [index: CandidateT] : number
+            },    
+        }
+    }
+}
+
+function EntityCreate( election: ElectionT, electionDefn: ElectionDefn ) : ElectionEntity {
+    const entity: ElectionEntity = {
+        title: title,
+        boxes_total: 0,
+        boxes_cnted: 0,
+    }
+    for ( const [ post, candidates ] in Object.entries( electionDefn[election] ) ) {
+        const cum_votes = {} ;
+        candidates.forEach( c => cum_votes[c.id] = 0 ) ;
+        entity.posts[post] = {
+            can_vote: 0,
+            rem_vote: 0,
+            did_vote: 0,
+            turnout: 0,
+            cum_votes: cum_votes
+        }
+    }
+    return entity ;
+}
+function EntityStaticUpdate( entity: ElectionEntity, voteBox: VoteBoxDefn ) : ElectionEntity {
+    entity.boxes_total++ ;
+    for ( const [ post, vote_result ] of Object.entries( entity.posts ) ) {
+        entity[post][can_vote] += voteBox[posts][post] ;
+        entity[post][rem_vote] += voteBox[posts][post] ;
+    }
+    return entity ;
+}
+function EntityResultUpdate( entity: ElectionEntity, box: VoteBoxResult ) : void {
+    entity.boxes_cnted++;
+    for ( const [ post, candidates ] of Object.entries( box.votes ) ) {
+        let voted = 0 ;
+        for ( const [ candidate, votes ] of Object.entries( candidates ) ) {
+            entity[post][candidate] += votes ;
+            voted += votes ;
+        }
+        entity[post][did_vote] += voted ;
+        entity[post][rem_vote] -= voted ;
+        entity[post][turnout] = Turnout( entity[post][did_vote], entity[post][can_vote] ) ;
+    }
+}
+
+
+function createModel() : void {
+    const store = window.sessionStorage ;
+    const electionDefn : ElectionDefn = JSON.parse( store.getItem( KEY_ELECTION ) ) as ElectionDefn ;
+    const voteBoxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
+    const model = {} ;
+    for ( const vb of voteBoxes ) {
+        if ( !model.hasOwnProperty( vb.election ) ) model[vb.election] = EntityCreate( vb.election, electionDefn ) ; 
+        const election = EntityStaticUpdate( model[vb.election], vb ) ;
+        if ( !election.hasOwnProperty( vb.regiontype ) ) election[vb.regiontype] = EntityCreate( vb.regiontype, electionDefn ) ; 
+        const regiontype = EntityStaticUpdate( election[vb.regiontype], vb ) ;
+        if ( !regiontype.hasOwnProperty( vb.region ) ) regiontype[vb.region] = EntityCreate( vb.region, electionDefn ) ;
+        const region = EntityStaticUpdate( regiontype[vb.region], vb ) ;
+        if ( !region.hasOwnProperty( vb.island ) ) region[vb.island] = EntityCreate( vb.island, electionDefn ) ; 
+        const island = EntityStaticUpdate( region[vb.island], vb ) ;
+        if ( !region.hasOwnProperty( vb.constit ) ) region[vb.constit] = EntityCreate( vb.constit, electionDefn ) ; 
+        const constit = EntityStaticUpdate( region[vb.constit], vb ) ;
+        const box = EntityCreate( vb.box, electionDefn ) ;
+        island[vb.box] = box ;
+        constit[vb.box] = box ;
+    }
+}
 function updateModel() : void {
     const store = window.sessionStorage ;
-    const voteBoxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
-    const voteBoxResults : VoteBoxResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteBoxResult[] ;
-    const boxes : { [index: string] : [ VoteBox, VoteBoxResult ] }  = {},
-          islands : { [index: string] : Entity[] }  = {},
-          constits : { [index: string] : Entity[] }  = {} 
-    ;
-    voteBoxes.forEach( vb => {
-        boxes[vb.box] = [ vb, null ] ;
-        islands[vb.island] = [] ;
-        constits[vb.constit] = [] ; 
-    } ) ;
-    voteBoxResults.forEach( vbr => boxes[vbr.box][1] = vbr ) ;
-    const boxEs : Box[] = [],
-          islandEs : Island[],
-          constitEs : Constituency[] ;
-    boxes.forEach( box => {
-        const [ vb, vbr ] = box ;
-        const b = new Box( vb, vbr ) ;
-        islands[vb.island].push( b ) ;
-        constit[vb.constit].push( b ) ;
-    } ) ;
-
-    const islandBoxes = {}, constitBoxes = {} ;
-}
-function updatePage() : void {
+    const vbr : VoteBoxResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteBoxResult[] ;
 
 }
 
@@ -73,190 +151,6 @@ function updatePage() : void {
 
 function Turnout( did_vote: number, can_vote: number ) : number {
     return Number( 100 * did_vote / can_vote ).toFixed( 1 ) ;
-}
-
-abstract class Entity {
-
-    title: string = "" ;
-    child_total: number = 0 ;
-    child_counted: number = 0 ;
-    completed: boolean = false ;
-    can_vote: number = 0 ;
-    did_vote: number = 0 ;
-    turnout: number = 0 ;
-    votes: { [index: number] : number } = {}
- 
-}
-
-class Box extends Entity {
-    
-    constructor( voteBox: VoteBox, voteBoxResult: VoteBoxResult ) {
-        this.title = "Box: " + voteBox.box ;
-        this.child_total = 1 ;
-        this.can_vote = voteBox.can_vote ;
-        if ( voteBoxResult ) {
-            this.child_counted = 1 ;
-            this.completed = true ;
-            this.did_vote = Object.values( voteBoxResult.votes ).reduce( ( pv, cv ) => pv + cv, 0 ) ;
-            this.turnout = Turnout( this.did_vote, voteBox.can_vote ) ;
-            for ( const [ key, value ] in Object.entries( voteBoxResult.votes ) ) {
-                votes[key] = value ;
-            }
-        }
-    }
-
-}
-
-abstract class Aggregate extends Entity {
-    
-    constructor( entities: Entity[], title: string ) {
-        this.title = title ;
-        this.child_total = entities.length ;
-        this.child_counted = entities.reduce( ( pv, cv ) => pv + cv.child_counted, 0 ) ;
-        this.can_vote = entities.reduce( ( pv, cv ) => pv + cv.can_vote, 0 ) ;
-        this.completed = ( this.child_total == this.child_counted ) ;
-        if ( this.child_counted ) {
-            this.did_vote = entities.reduce( ( pv, cv ) => pv + cv.did_vote, 0 ) ;
-            this.turnout = Turnout( this.did_vote, this.can_vote ) ;
-            for ( const key in entities[0].votes ) {
-                this.votes[key] = 0 ;
-            }
-            for ( const entity of entities ) {
-                for ( const [ key, valaue ] in Object.entries( entity.votes ) ) {
-                    this.votes[key] += value ;
-                }
-            }
-        }
-    }
-
-}
-
-class Island extends Aggregate {
-    constructor( boxes: Box[], island: string ) {
-        super( boxes, `Island: ${constit}` ) ;
-    }
-}
-class Constituency extends Aggregate {
-    constructor( boxes: Box[], constit: string ) {
-        super( boxes, `Constituency: ${constit}` ) ;
-    }
-}
-
-class AtollIslands extends Aggregate {
-    constructor( islands: Island[], atoll: string ) {
-        super( islands, `Atoll: ${atoll} by Geography` ) ;
-    }
-}
-class AtollConstituencies extends Aggregate {
-    constructor( constits: Constituency[], atoll: string ) {
-        super( constits, `Atoll: ${atoll} by Constituency` ) ;
-    }
-}
-class CityIslands extends Aggregate {
-    constructor( islands: Island[], city: string ) {
-        super( islands, `City: ${city} by Geography` ) ;
-    }
-}
-class CityConstituencies extends Aggregate {
-    constructor( constits: Constituency[], city: string ) {
-        super( constits, `City: ${city} by Constituency` ) ;
-    }
-}
-
-class GroupedAtollIslands extends Aggregate {
-    constructor( atolls: AtollIsland[] ) {
-        super( atolls, "All Atolls by Geography " ) ;
-    }
-}
-class GroupedAtollConstituencies extends Aggregate {
-    constructor( atoll: AtollConstituencies[] ) {
-        super( constits, "All Atolls by Constituency " ) ;
-    }
-}
-
-class GroupedCityIslands extends Aggregate {
-    constructor( cities: CityIslands[] ) {
-        super( cities, "All Cities by Geography " ) ;
-    }
-}
-class GroupedCityConstituencies extends Aggregate {
-    constructor( cities: CityConstituencies[] ) {
-        super( cities, "All Cities by Constituency " ) ;
-    }
-}
-
-class OverallIslands extends Aggregate {
-    constructor( cities: GroupedCityIslands, atolls: GroupedAtollIslands ) {
-        super( [ cities, atolls ], "Cities and Atolls by Geography" ) ;
-    }
-}
-class OverallConstituencies extends Aggregate {
-    constructor( cities: GroupedCityConstituencies, atolls: GroupedAtollConstituencies ) {
-        super( [ cities, atolls ], "Cities and Atolls by Constituency" ) ;
-    }
-}
-
-
-
-function fetchProcess() {
-    const store = window.sessionStorage ;
-    const boxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
-    const voteResults : VoteResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteResult[] ;
-    // compute overall
-    const overallVote: OverallVote = {
-        box_voted : results.length,
-        box_total : boxes.length,
-        results : [] 
-    }
-    for ( const result of voteResults ) {
-        addResult( result, result.overallResult.results ) ;
-    }
-
-
-}
-
-
-function addResult( from : CandidateVote[][], to : CandidateVote[] ) : number {
-    // ensure "to" contains all required candidates
-    const candidates : Set<string> = new Set( from[0].map( c => c.candidate ) ) ;
-    const objVotes : CandidateVotes = objFromCandidateVote( candidates ) ;
-    // add up
-    for ( const candidateVoteArray of from ) {
-        for ( const candidateVote of candidateVoteArray ) {
-            objVotes[candidateVote.candidate] += candidateVote.votes ;
-        }
-    }
-    // return
-    objToCandidateVotes( objVotes, to ) ;
-    return properCandidateVotes( to ) ;        
-}
-
-function objFromCandidateVote( candidates : Set<string> ) : CandidatesVotes {
-    const objVotes = {} ;
-    for ( const candidate of candidates ) {
-        objVotes[candidate] = 0 ;
-    }
-    return objVotes ;
-}
-function objToCandidateVotes( obj: CandidatesVotes, candidateVotes : CandidateVote[] ) {
-    for ( const candidate in obj ) {
-        const candidateVote: CandidateVote = candidateVotes.find( c => c.candidate == candidate ) ;
-        if ( !candidateVote ) {
-            candidateVotes.push( {
-                candidate: candidate,
-                votes : obj[candidate]
-            } ) ;
-        } else {
-            candidateVote.votes += obj[candidate] ;
-        }
-    }
-}
-
-function properCandidateVotes( candidateVotes : CandidateVote[] ) : number {
-    const did_vote : number = candidateVotes.reduce( ( total_votes, candidateVote ) => total_votes + candidateVote.votes, 0 ) ;
-    candidateVotes.sort( ( candidateVote1, candidateVote2 ) => candidateVote2.votes - candidateVote1.votes ) ;
-    candidateVotes.forEach( candidateVote => candidateVote.percent = Number(candidateVote.votes/did_vote).toFixed(1) ) ;        
-    return did_vote ;
 }
 
 
