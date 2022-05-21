@@ -1,27 +1,29 @@
 
-type ElectionT = string ;
-type ElectionPostT = string ;
-type BoxT = string ;
-type CandidateT = string ;
+type ElectionKey = string ;
+type PostKey = string ;
+type BoxKey = string ;
+type CandidateKey = string ;
+type CanVoteT = number ;
+type DidVoteT = number ;
 
 type VoteBoxDefn = {
-    [index: BoxT] : {
-        election : ElectionT,
+    [index: BoxKey] : {
+        election : ElectionKey,
         regiontype: "C"|"A",
         region : string,
         island : string,
         constit : string,
         posts : {
-            [index: ElectionPostT] : number,
+            [index: PostKey] : CanVoteT,
         },
     }
 }
 type ElectionDefn = {
-    [index: ElectionT] : {
+    [index: ElectionKey] : {
         description: string,
         posts: {
-            [index: ElectionPostT] : {
-                id: CandidateT,
+            [index: PostKey] : {
+                id: CandidateKey,
                 name: string,
                 party: string,
             }[]
@@ -30,11 +32,11 @@ type ElectionDefn = {
     }
 }
 type VoteBoxResult = {
-    election : ElectionT,
-    box : BoxT,
+    election : ElectionKey,
+    box : BoxKey,
     votes : {
-        [index: ElectionPostT] : {
-            [index: CandidateT] : number
+        [index: PostKey] : {
+            [index: CandidateKey] : DidVoteT
         }
     }
 }
@@ -61,25 +63,25 @@ function fetchVoteBoxResult(): void {
 }
 
 
-type ElectionEntity = {
+type AggregateT = {
     title: string,
     boxes_total: number,
     boxes_count: number,
     posts: {
-        [index: ElectionPostT]: {
-            can_vote: number,
+        [index: PostKey]: {
+            can_vote: CanVoteT,
             rem_vote: number,
-            did_vote: number,
+            did_vote: DidVoteT,
             turnout: number,
             cum_votes : {
-                [index: CandidateT] : number
+                [index: CandidateKey] : DidVoteT
             },    
         }
     }
 }
 
-function EntityCreate( election: ElectionT, electionDefn: ElectionDefn ) : ElectionEntity {
-    const entity: ElectionEntity = {
+function CreateAggretate( election: ElectionKey, electionDefn: ElectionDefn ) : AggregateT {
+    const aggr: AggregateT = {
         title: title,
         boxes_total: 0,
         boxes_cnted: 0,
@@ -87,7 +89,7 @@ function EntityCreate( election: ElectionT, electionDefn: ElectionDefn ) : Elect
     for ( const [ post, candidates ] in Object.entries( electionDefn[election] ) ) {
         const cum_votes = {} ;
         candidates.forEach( c => cum_votes[c.id] = 0 ) ;
-        entity.posts[post] = {
+        aggr.posts[post] = {
             can_vote: 0,
             rem_vote: 0,
             did_vote: 0,
@@ -95,48 +97,49 @@ function EntityCreate( election: ElectionT, electionDefn: ElectionDefn ) : Elect
             cum_votes: cum_votes
         }
     }
-    return entity ;
+    return aggr ;
 }
-function EntityStaticUpdate( entity: ElectionEntity, voteBox: VoteBoxDefn ) : ElectionEntity {
-    entity.boxes_total++ ;
-    for ( const [ post, vote_result ] of Object.entries( entity.posts ) ) {
-        entity[post][can_vote] += voteBox[posts][post] ;
-        entity[post][rem_vote] += voteBox[posts][post] ;
+function BuildAggretate( aggr: AggregateT, voteBox: VoteBoxDefn ) : AggregateT {
+    aggr.boxes_total++ ;
+    for ( const [ post, vote_result ] of Object.entries( aggr.posts ) ) {
+        aggr[post][can_vote] += voteBox[posts][post] ;
+        aggr[post][rem_vote] += voteBox[posts][post] ;
     }
-    return entity ;
+    return aggr ;
 }
-function EntityResultUpdate( entity: ElectionEntity, box: VoteBoxResult ) : void {
-    entity.boxes_cnted++;
+function aggrResultUpdate( aggr: AggregateT, box: VoteBoxResult ) : void {
+    aggr.boxes_cnted++;
     for ( const [ post, candidates ] of Object.entries( box.votes ) ) {
         let voted = 0 ;
         for ( const [ candidate, votes ] of Object.entries( candidates ) ) {
-            entity[post][candidate] += votes ;
+            aggr[post][candidate] += votes ;
             voted += votes ;
         }
-        entity[post][did_vote] += voted ;
-        entity[post][rem_vote] -= voted ;
-        entity[post][turnout] = Turnout( entity[post][did_vote], entity[post][can_vote] ) ;
+        aggr[post][did_vote] += voted ;
+        aggr[post][rem_vote] -= voted ;
+        aggr[post][turnout] = Turnout( aggr[post][did_vote], aggr[post][can_vote] ) ;
     }
 }
 
 
 function createModel() : void {
     const store = window.sessionStorage ;
+    // TODO
     const electionDefn : ElectionDefn = JSON.parse( store.getItem( KEY_ELECTION ) ) as ElectionDefn ;
     const voteBoxes : VoteBox[] = JSON.parse( store.getItem( KEY_BOXES ) ) as VoteBox[] ;
     const model = {} ;
     for ( const vb of voteBoxes ) {
-        if ( !model.hasOwnProperty( vb.election ) ) model[vb.election] = EntityCreate( vb.election, electionDefn ) ; 
-        const election = EntityStaticUpdate( model[vb.election], vb ) ;
-        if ( !election.hasOwnProperty( vb.regiontype ) ) election[vb.regiontype] = EntityCreate( vb.regiontype, electionDefn ) ; 
-        const regiontype = EntityStaticUpdate( election[vb.regiontype], vb ) ;
-        if ( !regiontype.hasOwnProperty( vb.region ) ) regiontype[vb.region] = EntityCreate( vb.region, electionDefn ) ;
-        const region = EntityStaticUpdate( regiontype[vb.region], vb ) ;
-        if ( !region.hasOwnProperty( vb.island ) ) region[vb.island] = EntityCreate( vb.island, electionDefn ) ; 
-        const island = EntityStaticUpdate( region[vb.island], vb ) ;
-        if ( !region.hasOwnProperty( vb.constit ) ) region[vb.constit] = EntityCreate( vb.constit, electionDefn ) ; 
-        const constit = EntityStaticUpdate( region[vb.constit], vb ) ;
-        const box = EntityCreate( vb.box, electionDefn ) ;
+        if ( !model.hasOwnProperty( vb.election ) ) model[vb.election] = CreateAggretate( vb.election, electionDefn ) ; 
+        const election = BuildAggretate( model[vb.election], vb ) ;
+        if ( !election.hasOwnProperty( vb.regiontype ) ) election[vb.regiontype] = CreateAggretate( vb.regiontype, electionDefn ) ; 
+        const regiontype = BuildAggretate( election[vb.regiontype], vb ) ;
+        if ( !regiontype.hasOwnProperty( vb.region ) ) regiontype[vb.region] = CreateAggretate( vb.region, electionDefn ) ;
+        const region = BuildAggretate( regiontype[vb.region], vb ) ;
+        if ( !region.hasOwnProperty( vb.island ) ) region[vb.island] = CreateAggretate( vb.island, electionDefn ) ; 
+        const island = BuildAggretate( region[vb.island], vb ) ;
+        if ( !region.hasOwnProperty( vb.constit ) ) region[vb.constit] = CreateAggretate( vb.constit, electionDefn ) ; 
+        const constit = BuildAggretate( region[vb.constit], vb ) ;
+        const box = CreateAggretate( vb.box, electionDefn ) ;
         island[vb.box] = box ;
         constit[vb.box] = box ;
     }
