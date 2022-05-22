@@ -7,16 +7,15 @@ type CanVoteT = number ;
 type DidVoteT = number ;
 
 type VoteBoxDefn = {
-    [index: BoxKey] : {
-        election : ElectionKey,
-        regiontype: "C"|"A",
-        region : string,
-        island : string,
-        constit : string,
-        posts : {
-            [index: PostKey] : CanVoteT,
-        },
-    }
+    election : ElectionKey,
+    regiontype: "C"|"A",
+    region : string,
+    island : string,
+    constit : string,
+    box: BoxKey,
+    posts : {
+        [index: PostKey] : CanVoteT,
+    },
 }
 type ElectionDefn = {
     [index: ElectionKey] : {
@@ -28,21 +27,25 @@ type ElectionDefn = {
                 party: string,
             }[]
         },
-        boxes: VoteBoxDefn
+        boxes: {
+            [index: BoxKey] : VoteBoxDefn
+        }
     }
 }
-type VoteBoxResult = {
-    election : ElectionKey,
-    box : BoxKey,
-    votes : {
-        [index: PostKey] : {
-            [index: CandidateKey] : DidVoteT
+type VotingResult = {
+    [index : ElectionKey]: {
+        [index : BoxKey]: {
+            [index: PostKey] : {
+                [index: CandidateKey] : DidVoteT
+            }
         }
     }
 }
 
 const URL_ElectionDefn  = "" ;
-const URL_VoteBoxResult = "" ;
+const URL_VotingResult = "" ;
+const KEY_Model = "key of model" ;
+
 
 function fetchFailure( e ) {
     console.error( e ) ;
@@ -55,16 +58,17 @@ function fetchElectionDefn(): void {
     $.getJSON( URL_ElectionDefn, fetchElectionDefnSuccess, fetchFailure ) ;
 }
 
-function fetchVoteBoxResultSuccess( data: VoteBoxResult ) : void {
-    window.sessionStorage.setItem( URL_VoteBoxResult, JSON.stringify( data ) ) ;
+function fetchVotingResultSuccess( data: VotingResult ) : void {
+    window.sessionStorage.setItem( URL_VotingResult, JSON.stringify( data ) ) ;
 }
-function fetchVoteBoxResult(): void {
-    $.getJSON( URL_VoteBoxResult, fetchVoteBoxResultSuccess, fetchFailure ) ;
+function fetchVotingResult(): void {
+    $.getJSON( URL_VotingResult, fetchVotingResultSuccess, fetchFailure ) ;
 }
 
 
 type AggregateT = {
     title: string,
+    election: ElectionKey,
     boxes_total: number,
     boxes_count: number,
     posts: {
@@ -83,10 +87,11 @@ type AggregateT = {
 function CreateAggretate( election: ElectionKey, electionDefn: ElectionDefn ) : AggregateT {
     const aggr: AggregateT = {
         title: title,
+        election: election,
         boxes_total: 0,
         boxes_cnted: 0,
     }
-    for ( const [ post, candidates ] in Object.entries( electionDefn[election] ) ) {
+    for ( const [ post, candidates ] in Object.entries( electionDefn[election].posts ) ) {
         const cum_votes = {} ;
         candidates.forEach( c => cum_votes[c.id] = 0 ) ;
         aggr.posts[post] = {
@@ -102,23 +107,28 @@ function CreateAggretate( election: ElectionKey, electionDefn: ElectionDefn ) : 
 function BuildAggretate( aggr: AggregateT, voteBox: VoteBoxDefn ) : AggregateT {
     aggr.boxes_total++ ;
     for ( const [ post, vote_result ] of Object.entries( aggr.posts ) ) {
-        aggr[post][can_vote] += voteBox[posts][post] ;
-        aggr[post][rem_vote] += voteBox[posts][post] ;
+        const post_can_vote = voteBox[posts][post] ;
+        aggr[post][can_vote] += post_can_vote ;
+        aggr[post][rem_vote] += post_can_vote ;
     }
     return aggr ;
 }
-function aggrResultUpdate( aggr: AggregateT, box: VoteBoxResult ) : void {
-    aggr.boxes_cnted++;
-    for ( const [ post, candidates ] of Object.entries( box.votes ) ) {
-        let voted = 0 ;
-        for ( const [ candidate, votes ] of Object.entries( candidates ) ) {
-            aggr[post][candidate] += votes ;
-            voted += votes ;
+
+function aggrResultUpdate( aggr: AggregateT, result: VotingResult ) : AggregateT {
+    for ( const boxes of result[aggr.election] ) {
+        aggr.boxes_cnted++;
+        for ( const [ post, candidates ] of Object.entries( boxes) ) {
+            let voted = 0 ;
+            for ( const [ candidate, votes ] of Object.entries( candidates ) ) {
+                aggr.posts[post][candidate] += votes ;
+                voted += votes ;
+            }
+            aggr.posts[post][did_vote] += voted ;
+            aggr.posts[post][rem_vote] -= voted ;
+            aggr.posts[post][turnout] = Turnout( aggr[post][did_vote], aggr[post][can_vote] ) ;    
         }
-        aggr[post][did_vote] += voted ;
-        aggr[post][rem_vote] -= voted ;
-        aggr[post][turnout] = Turnout( aggr[post][did_vote], aggr[post][can_vote] ) ;
     }
+    return aggr ;
 }
 
 
@@ -143,11 +153,26 @@ function createModel() : void {
         island[vb.box] = box ;
         constit[vb.box] = box ;
     }
+    store.setItem( KEY_Model, JSON.stringify( model ) ) ;
 }
-function updateModel() : void {
+function updateModel( votingResult: VotingResult) : void {
     const store = window.sessionStorage ;
-    const vbr : VoteBoxResult[] = JSON.parse( store.getItem( KEY_RESULTS ) ) as VoteBoxResult[] ;
+    const electionDefn : ElectionDefn = JSON.parse( store.getItem( KEY_ELECTION ) ) as ElectionDefn ;
+    const voteBoxDefn: VoteBoxDefn = electionDefn.
+    const model  = JSON.parse( store.getItem( KEY_Model ) ) ;
+    for ( const [ electionKey, boxes ] of Object.entries( votingResult ) ) {
+        for ( const [ boxKey, posts ] of Object.entries( boxes ) ) {
+            const boxDefn: VoteBoxDefn = electionDefn[electionKey][boxKey] ;
+            const election = aggrResultUpdate( model[boxDefn.electionKey], votingResult ) ;
 
+            for ( const [ postKey, candidates ] of Object.entries( posts ) ) {
+                for ( const [ candidateKey, votes ] of Object.entries( candidates ) ) {
+
+                }
+            }
+        }
+        const election = model[box.election] ;
+    }
 }
 
 
